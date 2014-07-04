@@ -70,6 +70,19 @@ using df::global::gps;
 using df::global::ui;
 using df::global::init;
 
+#ifdef WIN32
+#define WIN_STDCALL _stdcall
+#define render_stub _thiscall_render
+#define update_tile_stub _thiscall_update_tile
+#else
+#define WIN_STDCALL
+#define render_stub render
+#define update_tile_stub update_tile
+#endif
+
+void WIN_STDCALL update_tile(df::renderer *r, int x, int y);
+void WIN_STDCALL render(df::renderer *r);
+
 struct texture_fullid {
     int texpos;
     float r, g, b;
@@ -98,6 +111,29 @@ vector<string> split(const char *str, char c = ' ')
 }
 
 DFHACK_PLUGIN("twbt");
+
+#ifdef WIN32
+_declspec(naked) void _stdcall  _thiscall_update_tile(int x, int y)
+{
+    _asm {
+        pop eax;
+        push ecx;
+        push eax;
+        jmp update_tile;
+    }
+}
+
+_declspec(naked) void _stdcall  _thiscall_render()
+{
+    _asm {
+        pop eax;
+        push ecx;
+        push eax;
+        jmp render;
+    }
+}
+
+#endif
 
 void (*load_multi_pdim)(void *tex,const string &filename, long *tex_pos, long dimx, long dimy, bool convert_magenta, long *disp_x, long *disp_y);
 void (*update_tile_old)(df::renderer *r, int x, int y);
@@ -502,15 +538,9 @@ void write_tile_arrays(df::renderer *r, int x, int y, GLfloat *fg, GLfloat *bg, 
     *(tex++) = txt[ret.texpos].top;
 }
 
-#ifdef WIN32
-void __stdcall update_tile(int x, int y)
-#else
-void update_tile(df::renderer *r, int x, int y)
-#endif
+void WIN_STDCALL update_tile(df::renderer *r, int x, int y)
 {
-#ifdef WIN32
-    df::renderer *r = enabler->renderer;
-#endif
+
 
     if (!enabled || !texloaded)
     {
@@ -531,15 +561,8 @@ void update_tile(df::renderer *r, int x, int y)
     write_tile_arrays(r, x, y, fg, bg, tex);
 }
 
-#ifdef WIN32
-void __stdcall render()
-#else
-void render(df::renderer *r)
-#endif
+void WIN_STDCALL render(df::renderer *r)
 {
-#ifdef WIN32
-    df::renderer *r = enabler->renderer;
-#endif
 
     if (!texloaded)
     {
@@ -583,10 +606,11 @@ void hook()
 #endif
 
     update_tile_old = (void (*)(df::renderer *r, int x, int y))rVtable[0][0];
-    rVtable[0][0] = (long)&update_tile;
+    rVtable[0][0] = (long)&update_tile_stub;
 
     render_old = (void(*)(df::renderer *r))rVtable[0][2];
-    rVtable[0][2] = (long)&render;
+    rVtable[0][2] = (long)&render_stub;
+
 
     enabled = true;   
 
